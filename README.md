@@ -171,33 +171,78 @@ canopy_login_attempts_total{result}
 ## Project Structure
 
 ```
-canopy/
-├── cmd/server/main.go                  Entry point, wires all dependencies
-├── config/config.go                    Env-based config with validation
+canopy/                                          44 files · 4,412 Go lines
+│
+├── cmd/server/main.go                           Entry point — wires all deps, graceful shutdown
+├── config/config.go                             Env-based config with production validation
+├── go.mod                                       10 dependencies declared
+│
 ├── internal/
-│   ├── auth/auth.go                    JWT generation, validation, RBAC
-│   ├── models/models.go                All domain types
+│   ├── models/models.go                         All domain types: User, Deployment, Server,
+│   │                                            Metrics, AuditEntry, Webhook
+│   │
+│   ├── auth/auth.go                             JWT HS256 sign/validate, RBAC role hierarchy,
+│   │                                            context helpers (WithClaims/ClaimsFromContext)
+│   │
+│   ├── apierr/
+│   │   ├── apierr.go                            Typed error envelope: code + message + field details
+│   │   └── apierr_test.go                       3 tests: status codes, JSON shape, validation details
+│   │
+│   ├── validate/
+│   │   ├── validate.go                          Required, MinLen, MaxLen, Email, InRange,
+│   │   │                                        FloatRange, ValidURL, Collect
+│   │   └── validate_test.go                     7 tests covering every validator
+│   │
 │   ├── repository/
-│   │   ├── mongo.go                    MongoDB client + 13 indexes
-│   │   ├── redis.go                    Rate limiting + caching
-│   │   ├── repos.go                    Deployment, Server, Metrics repos
-│   │   ├── user_repo.go                User CRUD
-│   │   └── audit_webhook_repo.go       Audit (append-only) + Webhooks
+│   │   ├── errors.go                            ErrNotFound sentinel
+│   │   ├── mongo.go                             DB wrapper + Disconnect + 13 indexes + TTL
+│   │   ├── redis.go                             RateLimit (sliding window) + Set/Get/Del
+│   │   ├── repos.go                             DeploymentRepo, ServerRepo, MetricsRepo
+│   │   ├── user_repo.go                         GetByEmail, GetByAPIKey, UpdateLastLogin
+│   │   ├── audit_webhook_repo.go                AuditRepo (append-only) + WebhookRepo
+│   │   └── aggregations.go                      MongoDB $group pipeline for fleet stats
+│   │
 │   ├── service/
-│   │   ├── canary_service.go           Core: start/promote/rollback + audit
-│   │   ├── health_service.go           Metric evaluation + recommendations
-│   │   ├── user_service.go             Register (bcrypt) + Login (JWT)
-│   │   └── watcher_service.go          Background: auto-promote + heartbeat
-│   ├── notify/webhook.go               HMAC-signed delivery with retries
-│   ├── observability/metrics.go        Prometheus instruments
-│   ├── middleware/middleware.go         JWT/APIKey auth, RBAC, rate limit, logger
-│   ├── api/handlers/handlers.go        All HTTP handlers
-│   └── router/router.go                Chi routes with per-route RBAC
+│   │   ├── canary_service.go                    StartCanary, Promote, Rollback + audit logging
+│   │   ├── health_service.go                    EvaluateDeployment with reasons array
+│   │   ├── user_service.go                      Register (bcrypt), Login (JWT), GetByID, IssueToken
+│   │   ├── watcher_service.go                   Eval loop (30s) + heartbeat loop (60s), uses pool
+│   │   └── canopy_test.go                       10 unit tests: health eval + RBAC
+│   │
+│   ├── notify/
+│   │   ├── webhook.go                           HMAC-SHA256 signed delivery, 3 retries + backoff
+│   │   └── pool.go                              Bounded worker pool (10 workers, 200-job buffer)
+│   │
+│   ├── observability/metrics.go                 13 Prometheus instruments (counters/gauges/histograms)
+│   │
+│   ├── middleware/middleware.go                  RequestID, Logger, Authenticate (JWT+APIKey),
+│   │                                            RequireRole, RateLimit (nil-safe Redis)
+│   │
+│   ├── api/handlers/
+│   │   ├── handlers.go                          All handlers — Auth, Deployment, Server,
+│   │   │                                        Metrics, Audit, Webhook, Health
+│   │   ├── auth_refresh.go                      POST /auth/refresh — re-issue JWT
+│   │   └── status_handler.go                    GET /status — concurrent fleet snapshot
+│   │
+│   ├── router/router.go                         Chi routes with per-route RBAC assignments
+│   │
+│   └── integration/
+│       ├── helpers_test.go                      Full httptest.Server setup, HTTP helpers
+│       └── integration_test.go                  20 end-to-end tests against real MongoDB
+│
 ├── scripts/
-│   ├── seed.sh                         Create admin + servers + webhook
-│   └── deploy.sh                       Canary deployment + metric simulation
-├── Dockerfile                          Two-stage scratch build (~10MB image)
-├── docker-compose.yml                  MongoDB + Redis + Canopy
-└── Makefile
+│   ├── seed.sh                                  Create admin + 10 servers + Slack webhook
+│   ├── deploy.sh                                Start canary + stream healthy metrics
+│   ├── rollback.sh                              Manual rollback + audit trail
+│   └── status.sh                               Fleet health summary in terminal
+│
+├── docs/openapi.yaml                            Full OpenAPI 3.0 spec — every endpoint
+├── .github/workflows/ci.yml                     GitHub Actions: test + lint + docker build
+├── .golangci.yml                                11 linters (bodyclose, noctx, errcheck...)
+├── Dockerfile                                   Two-stage scratch build (~10MB image)
+├── docker-compose.yml                           MongoDB + Redis + Canopy with healthchecks
+├── Makefile                                     run, build, test, test-integration, lint, up, down
+├── .env.example
+├── README.md
+└── CONTRIBUTING.md
 ```
-Basic plan of the project for now.
