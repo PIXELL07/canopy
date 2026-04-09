@@ -171,7 +171,7 @@ canopy_login_attempts_total{result}
 ## Project Structure
 
 ```
-canopy/                                          44 files · 4,412 Go lines
+canopy/                                          44 files 
 │
 ├── cmd/server/main.go                           Entry point — wires all deps, graceful shutdown
 ├── config/config.go                             Env-based config with production validation
