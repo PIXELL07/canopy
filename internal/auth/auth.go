@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/yourname/canopy/internal/models"
+	"github.com/pixell07/canopy/internal/models"
 )
 
 // Errors
