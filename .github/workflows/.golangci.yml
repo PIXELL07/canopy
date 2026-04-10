@@ -1,0 +1,39 @@
+run:
+  timeout: 5m
+  go: "1.22"
+
+linters:
+  enable:
+    - errcheck       # check for unchecked errors
+    - gosimple       # simplification suggestions
+    - govet          # go vet checks
+    - ineffassign    # detect unused assignments
+    - staticcheck    # extensive static analysis
+    - unused         # detect unused code
+    - gofmt          # formatting
+    - goimports      # import ordering
+    - misspell       # catch typos in comments
+    - godot          # comment formatting
+    - noctx          # detect http calls without context
+    - bodyclose      # ensure http response bodies are closed
+    - contextcheck   # ensure context is propagated correctly
+    - exhaustive     # ensure exhaustive switch statements on enums
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+  govet:
+    enable-all: true
+  staticcheck:
+    checks: ["all"]
+
+issues:
+  exclude-rules:
+    # Allow fmt.Println in main
+    - path: cmd/
+      linters: [forbidigo]
+    # Allow error ignore in defer cleanup
+    - source: "defer.*\\.Close"
+      linters: [errcheck]
+    - source: "defer.*\\.Sync"
+      linters: [errcheck]
