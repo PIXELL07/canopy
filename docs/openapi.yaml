@@ -1,0 +1,517 @@
+openapi: "3.0.3"
+info:
+  title: Canopy API
+  description: |
+    Production canary deployment platform.
+    Manage rolling deployments across a fleet of servers with automatic health evaluation,
+    RBAC, audit logging, and webhook notifications.
+  version: "1.0.0"
+  contact:
+    name: Canopy
+    url: https://github.com/pixell07/canopy
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+security:
+  - BearerAuth: []
+  - ApiKeyAuth: []
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      description: Returns service status. No authentication required.
+      security: []
+      tags: [System]
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  service: { type: string, example: canopy }
+                  time: { type: string, format: date-time }
+
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      description: Prometheus scrape endpoint. No authentication required.
+      security: []
+      tags: [System]
+      responses:
+        "200":
+          description: Prometheus text format metrics
+
+  /auth/login:
+    post:
+      summary: Obtain JWT token
+      security: []
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/me:
+    get:
+      summary: Current user info
+      tags: [Auth]
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+
+  /auth/register:
+    post:
+      summary: Create user (admin only)
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: { type: string, maxLength: 100 }
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+                role:
+                  type: string
+                  enum: [admin, deployer, viewer]
+                  default: viewer
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /deployments:
+    get:
+      summary: List deployments
+      tags: [Deployments]
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: skip
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        "200":
+          description: Paginated deployment list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deployments:
+                    type: array
+                    items: { $ref: "#/components/schemas/Deployment" }
+                  limit: { type: integer }
+                  skip: { type: integer }
+
+    post:
+      summary: Start canary deployment
+      tags: [Deployments]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, version]
+              properties:
+                name: { type: string, maxLength: 100, example: "release-v2.1" }
+                version: { type: string, example: "v2.1" }
+                prev_version: { type: string, example: "v2.0" }
+                canary_percent:
+                  type: integer
+                  minimum: 1
+                  maximum: 50
+                  default: 5
+                  description: Percentage of fleet to deploy to first
+                monitor_seconds:
+                  type: integer
+                  minimum: 30
+                  default: 600
+                  description: How long to monitor before auto-promoting
+                max_error_rate:
+                  type: number
+                  minimum: 0.001
+                  maximum: 1.0
+                  default: 0.05
+                max_latency_ms:
+                  type: integer
+                  minimum: 1
+                  default: 500
+                notes: { type: string }
+      responses:
+        "201":
+          description: Canary deployment started
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Deployment" }
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  /deployments/{id}:
+    get:
+      summary: Get deployment
+      tags: [Deployments]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Deployment" }
+          description: Deployment found
+
+  /deployments/{id}/promote:
+    post:
+      summary: Promote deployment to 100%
+      tags: [Deployments]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Promoted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Deployment" }
+
+  /deployments/{id}/rollback:
+    post:
+      summary: Rollback canary servers
+      tags: [Deployments]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Rolled back
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Deployment" }
+
+  /servers:
+    get:
+      summary: List all servers
+      tags: [Servers]
+      responses:
+        "200":
+          description: Server list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Server" }
+    post:
+      summary: Register server (admin only)
+      tags: [Servers]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, host]
+              properties:
+                name: { type: string }
+                host: { type: string }
+                region: { type: string, example: "us-east-1" }
+                tags:
+                  type: array
+                  items: { type: string }
+                version: { type: string, example: "v1.0" }
+      responses:
+        "201":
+          description: Server registered
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Server" }
+
+  /servers/{id}/heartbeat:
+    post:
+      summary: Agent heartbeat
+      description: Called every 30s by agents running on each server. Keeps the server marked healthy.
+      tags: [Servers]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Heartbeat recorded
+
+  /metrics:
+    post:
+      summary: Ingest metrics snapshot
+      tags: [Metrics]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MetricsPayload" }
+      responses:
+        "202":
+          description: Metrics accepted
+
+  /metrics/server/{serverID}:
+    get:
+      summary: Recent metrics for a server
+      tags: [Metrics]
+      parameters:
+        - { name: serverID, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Metrics list
+
+  /metrics/deployment/{id}/report:
+    get:
+      summary: Health report for a deployment
+      tags: [Metrics]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Health evaluation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthReport" }
+
+  /audit:
+    get:
+      summary: Query audit log (admin only)
+      tags: [Audit]
+      parameters:
+        - name: resource_id
+          in: query
+          schema: { type: string }
+          description: Filter by resource (deployment, server, user)
+        - name: actor_id
+          in: query
+          schema: { type: string }
+          description: Filter by actor (user who performed the action)
+      responses:
+        "200":
+          description: Audit entries
+
+  /webhooks:
+    get:
+      summary: List webhooks
+      tags: [Webhooks]
+      responses:
+        "200":
+          description: Webhook list
+    post:
+      summary: Create webhook (admin only)
+      tags: [Webhooks]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, url, events]
+              properties:
+                name: { type: string }
+                url: { type: string, format: uri }
+                secret:
+                  type: string
+                  description: Used to sign payloads with HMAC-SHA256
+                events:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - deployment.started
+                      - deployment.completed
+                      - deployment.rolled_back
+                      - server.offline
+      responses:
+        "201":
+          description: Webhook created
+
+  /webhooks/{id}:
+    delete:
+      summary: Delete webhook (admin only)
+      tags: [Webhooks]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Deleted
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid authentication
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    Forbidden:
+      description: Insufficient role
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    Conflict:
+      description: Resource conflict
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    Unprocessable:
+      description: Business logic constraint violated
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  schemas:
+    ErrorEnvelope:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string, example: VALIDATION_ERROR }
+            message: { type: string }
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field: { type: string }
+                  issue: { type: string }
+
+    LoginResponse:
+      type: object
+      properties:
+        token: { type: string }
+        expires_at: { type: string, format: date-time }
+        user: { $ref: "#/components/schemas/User" }
+
+    Me:
+      type: object
+      properties:
+        user_id: { type: string }
+        email: { type: string }
+        name: { type: string }
+        role: { type: string, enum: [admin, deployer, viewer] }
+
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        role: { type: string }
+        active: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    Deployment:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        version: { type: string }
+        prev_version: { type: string }
+        status:
+          type: string
+          enum: [pending, canary, monitoring, rolling_out, completed, rolled_back, failed]
+        canary_percent: { type: integer }
+        canary_server_ids:
+          type: array
+          items: { type: string }
+        max_error_rate: { type: number }
+        max_latency_ms: { type: integer }
+        created_by_name: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time, nullable: true }
+        rollback_at: { type: string, format: date-time, nullable: true }
+        notes: { type: string }
+
+    Server:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        host: { type: string }
+        region: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        current_version: { type: string }
+        status: { type: string, enum: [healthy, unhealthy, draining, offline] }
+        is_canary: { type: boolean }
+        last_heartbeat: { type: string, format: date-time }
+
+    MetricsPayload:
+      type: object
+      required: [server_id, deployment_id, error_rate, latency_ms]
+      properties:
+        server_id: { type: string }
+        deployment_id: { type: string }
+        version: { type: string }
+        error_rate: { type: number, minimum: 0, maximum: 1 }
+        latency_ms: { type: integer, minimum: 1 }
+        request_count: { type: integer }
+        crash_count: { type: integer }
+        mem_usage_mb: { type: number }
+        cpu_percent: { type: number }
+
+    HealthReport:
+      type: object
+      properties:
+        deployment_id: { type: string }
+        version: { type: string }
+        avg_error_rate: { type: number }
+        avg_latency_ms: { type: number }
+        total_requests: { type: integer }
+        total_crashes: { type: integer }
+        sample_count: { type: integer }
+        is_healthy: { type: boolean }
+        recommendation:
+          type: string
+          enum: [promote, rollback, wait]
+        reasons:
+          type: array
+          items: { type: string }
+        generated_at: { type: string, format: date-time }
