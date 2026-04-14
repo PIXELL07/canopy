@@ -136,7 +136,7 @@ func (e *testEnv) mustCreateUserAndLogin(name, email, password string, role mode
 	}
 
 	// Login via HTTP to get a real JWT
-	resp := e.post("/auth/login", nil, map[string]string{
+	resp := e.post("/auth/login", "", map[string]string{
 		"email": email, "password": password,
 	})
 	if resp.StatusCode != http.StatusOK {

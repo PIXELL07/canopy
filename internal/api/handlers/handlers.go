@@ -490,7 +490,7 @@ func respond(w http.ResponseWriter, status int, body any) {
 }
 
 func decode(r *http.Request, v any) error {
-	r.Body = http.MaxBytesReader(r.ResponseWriter, r.Body, 1<<20)
+	r.Body = http.MaxBytesReader(r.ResponseWriter, r.Body, 1<<20) // fix
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	return dec.Decode(v)

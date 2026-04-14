@@ -59,7 +59,7 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 		err     error
 	}
 	type deployResult struct {
-		active []*repository.DeploymentRow
+		active []*repository.DeploymentRow // fix
 		err    error
 	}
 
@@ -79,7 +79,7 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 		}
 		rows := make([]*repository.DeploymentRow, 0, len(active))
 		for _, d := range active {
-			rows = append(rows, &repository.DeploymentRow{Deployment: d})
+			rows = append(rows, &repository.DeploymentRow{Deployment: d}) // fix
 		}
 		deployCh <- deployResult{active: rows}
 	}()
