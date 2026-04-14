@@ -34,7 +34,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
-	if err := decode(r, &body); err != nil {
+	if err := decode(w, r, &body); err != nil {
 		apierr.BadRequest("invalid JSON body").Write(w, http.StatusBadRequest)
 		return
 	}
@@ -64,7 +64,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		Password string      `json:"password"`
 		Role     models.Role `json:"role"`
 	}
-	if err := decode(r, &body); err != nil {
+	if err := decode(w, r, &body); err != nil {
 		apierr.BadRequest("invalid JSON body").Write(w, http.StatusBadRequest)
 		return
 	}
@@ -136,7 +136,7 @@ func (h *DeploymentHandler) Start(w http.ResponseWriter, r *http.Request) {
 		MaxLatencyMs   int64   `json:"max_latency_ms"`
 		Notes          string  `json:"notes"`
 	}
-	if err := decode(r, &body); err != nil {
+	if err := decode(w, r, &body); err != nil {
 		apierr.BadRequest("invalid JSON body").Write(w, http.StatusBadRequest)
 		return
 	}
@@ -273,7 +273,7 @@ func (h *ServerHandler) Register(w http.ResponseWriter, r *http.Request) {
 		Tags    []string `json:"tags"`
 		Version string   `json:"version"`
 	}
-	if err := decode(r, &body); err != nil {
+	if err := decode(w, r, &body); err != nil {
 		apierr.BadRequest("invalid JSON body").Write(w, http.StatusBadRequest)
 		return
 	}
@@ -329,7 +329,7 @@ func NewMetricsHandler(cs *service.CanaryService, hs *service.HealthService, log
 
 func (h *MetricsHandler) Ingest(w http.ResponseWriter, r *http.Request) {
 	var m models.Metrics
-	if err := decode(r, &m); err != nil {
+	if err := decode(w, r, &m); err != nil {
 		apierr.BadRequest("invalid metrics payload").Write(w, http.StatusBadRequest)
 		return
 	}
@@ -426,7 +426,7 @@ func (h *WebhookHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Secret string                `json:"secret"`
 		Events []models.WebhookEvent `json:"events"`
 	}
-	if err := decode(r, &body); err != nil {
+	if err := decode(w, r, &body); err != nil {
 		apierr.BadRequest("invalid JSON body").Write(w, http.StatusBadRequest)
 		return
 	}
@@ -489,8 +489,8 @@ func respond(w http.ResponseWriter, status int, body any) {
 	_ = json.NewEncoder(w).Encode(body)
 }
 
-func decode(r *http.Request, v any) error {
-	r.Body = http.MaxBytesReader(r.ResponseWriter, r.Body, 1<<20) // fix
+func decode(w http.ResponseWriter, r *http.Request, v any) error {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	return dec.Decode(v)
