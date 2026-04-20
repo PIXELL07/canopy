@@ -10,8 +10,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// StatusHandler provides a single endpoint that gives operators a full
-// system snapshot: fleet health, active deployments, recent activity.
 type StatusHandler struct {
 	deployRepo *repository.DeploymentRepo
 	serverRepo *repository.ServerRepo
@@ -22,11 +20,10 @@ func NewStatusHandler(dr *repository.DeploymentRepo, sr *repository.ServerRepo, 
 	return &StatusHandler{deployRepo: dr, serverRepo: sr, log: log}
 }
 
-// FleetSummary is the response shape for GET /status.
 type FleetSummary struct {
-	GeneratedAt       time.Time            `json:"generated_at"`
-	Fleet             FleetStats           `json:"fleet"`
-	ActiveDeployments []*DeploymentSummary `json:"active_deployments"`
+	GeneratedAt       time.Time           `json:"generated_at"`
+	Fleet             FleetStats          `json:"fleet"`
+	ActiveDeployments []DeploymentSummary `json:"active_deployments"`
 }
 
 type FleetStats struct {
@@ -48,19 +45,17 @@ type DeploymentSummary struct {
 	CreatedBy     string `json:"created_by"`
 }
 
-// GET /status  (viewer+)
 func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	// Fetch all servers and active deployments concurrently
 	type serverResult struct {
-		servers []*repository.ServerStatusRow
-		err     error
+		rows []*repository.ServerStatusRow
+		err  error
 	}
 	type deployResult struct {
-		active []*repository.DeploymentRow // fix
-		err    error
+		summaries []DeploymentSummary
+		err       error
 	}
 
 	serverCh := make(chan serverResult, 1)
@@ -68,7 +63,7 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	go func() {
 		rows, err := h.serverRepo.GetStatusCounts(ctx)
-		serverCh <- serverResult{servers: rows, err: err}
+		serverCh <- serverResult{rows: rows, err: err}
 	}()
 
 	go func() {
@@ -77,25 +72,36 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 			deployCh <- deployResult{err: err}
 			return
 		}
-		rows := make([]*repository.DeploymentRow, 0, len(active))
+		summaries := make([]DeploymentSummary, 0, len(active))
 		for _, d := range active {
-			rows = append(rows, &repository.DeploymentRow{Deployment: d}) // fix
+			summaries = append(summaries, DeploymentSummary{
+				ID:            d.ID.Hex(),
+				Name:          d.Name,
+				Version:       d.Version,
+				Status:        string(d.Status),
+				CanaryPercent: d.CanaryPercent,
+				CanaryServers: len(d.CanaryServerIDs),
+				AgeSeconds:    int64(time.Since(d.CreatedAt).Seconds()),
+				CreatedBy:     d.CreatedByName,
+			})
 		}
-		deployCh <- deployResult{active: rows}
+		deployCh <- deployResult{summaries: summaries}
 	}()
 
 	sr := <-serverCh
 	dr := <-deployCh
 
 	if sr.err != nil || dr.err != nil {
-		h.log.Error("status fetch failed", zap.Any("server_err", sr.err), zap.Any("deploy_err", dr.err))
+		h.log.Error("status fetch failed",
+			zap.Any("server_err", sr.err),
+			zap.Any("deploy_err", dr.err),
+		)
 		apierr.Internal().Write(w, http.StatusInternalServerError)
 		return
 	}
 
-	// Aggregate fleet stats
 	stats := FleetStats{}
-	for _, row := range sr.servers {
+	for _, row := range sr.rows {
 		stats.Total += row.Count
 		switch row.Status {
 		case "healthy":
@@ -110,25 +116,9 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Build deployment summaries
-	summaries := make([]*DeploymentSummary, 0, len(dr.active))
-	for _, row := range dr.active {
-		d := row.Deployment
-		summaries = append(summaries, &DeploymentSummary{
-			ID:            d.ID.Hex(),
-			Name:          d.Name,
-			Version:       d.Version,
-			Status:        string(d.Status),
-			CanaryPercent: d.CanaryPercent,
-			CanaryServers: len(d.CanaryServerIDs),
-			AgeSeconds:    int64(time.Since(d.CreatedAt).Seconds()),
-			CreatedBy:     d.CreatedByName,
-		})
-	}
-
 	respond(w, http.StatusOK, FleetSummary{
 		GeneratedAt:       time.Now().UTC(),
 		Fleet:             stats,
-		ActiveDeployments: summaries,
+		ActiveDeployments: dr.summaries,
 	})
 }
