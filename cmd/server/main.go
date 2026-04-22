@@ -146,3 +146,5 @@ func main() {
 	// pool.Stop() called via defer — drains in-flight webhooks
 	logger.Info("canopy stopped cleanly")
 }
+
+// fix: error github workflows
