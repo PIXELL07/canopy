@@ -1,6 +1,8 @@
 module github.com/pixell07/canopy
 
-go 1.25.4
+go 1.25.0
+
+toolchain go1.25.4
 
 require (
 	go.uber.org/zap v1.27.1
