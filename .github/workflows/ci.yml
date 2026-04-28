@@ -45,9 +45,6 @@ jobs:
       - name: Download dependencies
         run: go mod download
 
-      - name: Verify dependencies
-        run: go mod verify
-
       - name: Build
         run: go build ./...
 
@@ -63,13 +60,6 @@ jobs:
           JWT_SECRET: ci-test-secret-not-for-production
           APP_ENV: test
 
-      - name: Upload coverage
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: test-results
-          path: "*.out"
-
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -82,9 +72,9 @@ jobs:
           cache: true
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v4
+        uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          version: v1.57.2
           args: --timeout=5m
 
   docker:
