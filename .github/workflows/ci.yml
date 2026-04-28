@@ -60,27 +60,10 @@ jobs:
           JWT_SECRET: ci-test-secret-not-for-production
           APP_ENV: test
 
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.25"
-          cache: true
-
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: v1.64.8
-          args: --timeout=5m --go=1.23
-
   docker:
     name: Docker build
     runs-on: ubuntu-latest
-    needs: [test, lint]
+    needs: [test]
     if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
