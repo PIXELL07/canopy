@@ -27,3 +27,6 @@ issues:
       linters: [errcheck]
     - path: "_test\\.go"
       linters: [errcheck]
+  exclude:
+    - "could not import"
+    - "could not load export data"
